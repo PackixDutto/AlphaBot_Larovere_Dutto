@@ -1,30 +1,54 @@
 import socket
+import RPi.GPIO as GPIO
+import time
+import AlphaBot
 
-MY_ADDRESS = ("192.168.1.119", 9090)
+from pynput import keyboard #X controllo robot movimento da tastiera
+
+#funzione chiamata quando un tasto viene premuto 
+def on_press(key):
+    #try
+    if key.char == "w":
+        print("press w")
+# expect AttributeError:
+# ignora tasti speciali come Shift, Crel, etc
+#pass
+#funzione chiamata quando un tasto viene rilasciato 
+def on_release(key):
+    #try:
+    if key.char == "w":
+        print("release w")
+#except AttributeError:
+#       pass
+def start_listener():
+    #Listener per intercettare gli eventi da tastiera 
+    with keyboard.listener(on_press = on_press, on_release = on_release) as listener:
+            listener.join()
+
+start_listener()
+
+MY_ADDRESS = ("192.168.1.123", 9999)
 BUFFER_SIZE = 4096
+alice = AlphaBot.AlphaBot()
+alice.stop()
 
 commands = ["forward", "backward", "left", "right"]
-#Client gira sul computer, processo server gira sul robot. Messaggi di due tipi: richieste (client a server) risposte (server a client)
-#richieste: f"{command}|{value}"
-#risposte: f"{status}|{phrase}" status = ok o error, phrase = frase dell'errore avvenuto
-#comandi possibili: forward, backward, left, right
-#Server TCP che gestisca un singolo client (più facile perché non usiamo i thread)
+
 def main():
-    server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)  #Creo il socket
-    server_socket.bind(MY_ADDRESS)  #Associo il socket all'indirizzo IP e alla porta
-    server_socket.listen()  #Mi metto in ascolto, in attesa di connessioni
+    server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    server_socket.bind(MY_ADDRESS)
+    server_socket.listen()
 
     print("Server in ascolto su", MY_ADDRESS)
 
     while True:
-        client_socket, client_address = server_socket.accept()  #Accetto la connessione dal client
+        client_socket, client_address = server_socket.accept()
         print(f"Connessione stabilita con {client_address}")
 
         connection_open = True
         while connection_open:
-            message = client_socket.recv(BUFFER_SIZE)  #Ricevo il messaggio
+            message = client_socket.recv(BUFFER_SIZE)
             if not message:
-                #Se il messaggio è vuoto, il client ha chiuso la connessione
                 print(f"Connessione chiusa da {client_address}")
                 connection_open = False
                 continue
@@ -33,11 +57,23 @@ def main():
             if len(string) == 2:
                 command = string[0]
                 value = string[1]
+                print(command)
+                print(value)
 
                 if command in commands:
                     status = "ok"
                     phrase = f"Comando {command} eseguito con valore {value}"
                     print(f"Ricevuto comando da {client_address}: {command} con valore {value}")
+                    if command == commands[0]:
+                        alice.forward()
+                    elif command == commands[1]:
+                        alice.backward()
+                    elif command == commands[2]:
+                        alice.left()
+                    elif command == commands[3]:
+                        alice.right()
+                    time.sleep(float(value))  #Conversione del valore
+                    alice.stop()
                 else:
                     status = "error"
                     phrase = "Comando non esistente"
@@ -48,11 +84,11 @@ def main():
                 print(f"Errore: messaggio malformato {message.decode()}")
 
             response = f"{status}|{phrase}"
-            client_socket.send(response.encode())  #Invia la risposta al client
+            client_socket.send(response.encode())
 
-        client_socket.close()  #Chiudo il socket del client quando la connessione termina
+        client_socket.close()
 
-    server_socket.close()  #Chiudo il socket del server quando termina il ciclo principale
+    server_socket.close()
 
 if _name_ == "_main_":
     main()
