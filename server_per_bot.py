@@ -1,94 +1,118 @@
 import socket
+import threading
 import RPi.GPIO as GPIO
 import time
 import AlphaBot
 
-from pynput import keyboard #X controllo robot movimento da tastiera
-
-#funzione chiamata quando un tasto viene premuto 
-def on_press(key):
-    #try
-    if key.char == "w":
-        print("press w")
-# expect AttributeError:
-# ignora tasti speciali come Shift, Crel, etc
-#pass
-#funzione chiamata quando un tasto viene rilasciato 
-def on_release(key):
-    #try:
-    if key.char == "w":
-        print("release w")
-#except AttributeError:
-#       pass
-def start_listener():
-    #Listener per intercettare gli eventi da tastiera 
-    with keyboard.listener(on_press = on_press, on_release = on_release) as listener:
-            listener.join()
-
-start_listener()
-
+# Indirizzo del server e dimensione del buffer
 MY_ADDRESS = ("192.168.1.123", 9999)
 BUFFER_SIZE = 4096
 alice = AlphaBot.AlphaBot()
 alice.stop()
 
-commands = ["forward", "backward", "left", "right"]
+# Variabile di controllo per la perdita dell'heartbeat
+heartbeat_lost = False
 
+# Comandi disponibili per il robot
+commands = {
+    "forward": alice.forward,
+    "backward": alice.backward,
+    "left": alice.left,
+    "right": alice.right,
+}
+
+# Funzione per gestire la ricezione degli heartbeat
+def hearthbeat_receive(recive_heartbeat):
+    global heartbeat_lost
+    recive_heartbeat.settimeout(6.5)
+    while not heartbeat_lost:
+        try:
+            data = recive_heartbeat.recv(4096)
+            if data:
+                print("Heartbeat ricevuto")
+            else:
+                print("Heartbeat terminato")
+                heartbeat_lost = True
+        except socket.timeout:
+            print("FERMA TUTTO - Timeout Heartbeat")
+            heartbeat_lost = True
+        except Exception as e:
+            print(f"Errore durante la ricezione dell'heartbeat: {e}")
+            heartbeat_lost = True
+
+# Funzione principale per gestire i comandi
 def main():
-    server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    server_socket.bind(MY_ADDRESS)
-    server_socket.listen()
+    global heartbeat_lost
 
-    print("Server in ascolto su", MY_ADDRESS)
+    # Creazione dei socket per comandi e heartbeat
+    socket_command = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    socket_heartbeat = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
-    while True:
-        client_socket, client_address = server_socket.accept()
-        print(f"Connessione stabilita con {client_address}")
+    # Associa i socket a un indirizzo e porta
+    socket_command.bind(("localhost", 12345))
+    socket_heartbeat.bind(("localhost", 12346))
 
-        connection_open = True
-        while connection_open:
-            message = client_socket.recv(BUFFER_SIZE)
+    # Il server ascolta le connessioni in entrata
+    socket_command.listen(1)
+    socket_heartbeat.listen(1)
+    print("Server TCP in attesa di connessioni...")
+
+    # Accetta una connessione per i comandi
+    recive_command, address1 = socket_command.accept()
+    print("Connessione Command stabilita")
+    # Accetta una connessione per l'heartbeat
+    recive_heartbeat, address2 = socket_heartbeat.accept()
+    print("Connessione Heartbeat stabilita")
+
+    # Avvia il thread per gestire gli heartbeat
+    thread_heartbeat = threading.Thread(
+        target=hearthbeat_receive, args=(recive_heartbeat,)
+    )
+    thread_heartbeat.start()
+
+    # Gestione dei comandi
+    while not heartbeat_lost:
+        try:
+            message = recive_command.recv(BUFFER_SIZE)
             if not message:
-                print(f"Connessione chiusa da {client_address}")
-                connection_open = False
-                continue
+                print("Connessione chiusa dal client per i comandi")
+                break
 
+            # Decodifica del messaggio ricevuto
             string = message.decode().split("|")
             if len(string) == 2:
                 command = string[0]
                 value = string[1]
-                print(command)
-                print(value)
+                print(f"Comando ricevuto: {command} con valore {value}")
 
+                # Esecuzione del comando se valido
                 if command in commands:
-                    status = "ok"
-                    phrase = f"Comando {command} eseguito con valore {value}"
-                    print(f"Ricevuto comando da {client_address}: {command} con valore {value}")
-                    if command == commands[0]:
-                        alice.forward()
-                    elif command == commands[1]:
-                        alice.backward()
-                    elif command == commands[2]:
-                        alice.left()
-                    elif command == commands[3]:
-                        alice.right()
-                    time.sleep(float(value))  #Conversione del valore
-                    alice.stop()
+                    if value == "start":  # Inizia a muoversi
+                        commands[command]()  # Esegue la funzione associata al comando
+                        response = f"ok|Comando {command} iniziato"
+                    elif value == "stop":  # Ferma il movimento
+                        alice.stop()
+                        response = f"ok|Comando {command} fermato"
+                    else:
+                        response = "error|Valore non valido"
                 else:
-                    status = "error"
-                    phrase = "Comando non esistente"
-                    print(f"Errore: comando {command} non riconosciuto")
+                    response = "error|Comando non riconosciuto"
             else:
-                status = "error"
-                phrase = "Formato del messaggio non valido"
-                print(f"Errore: messaggio malformato {message.decode()}")
+                response = "error|Formato del messaggio non valido"
 
-            response = f"{status}|{phrase}"
-            client_socket.send(response.encode())
+            # Invio della risposta al client
+            recive_command.send(response.encode())
+        except Exception as e:
+            print(f"Errore durante la gestione dei comandi: {e}")
+            break
 
-        client_socket.close()
-
-    server_socket.close()
+    # Ferma il robot e chiude le connessioni se l'heartbeat è perso
+    alice.stop()
+    recive_command.close()
+    recive_heartbeat.close()
+    socket_command.close()
+    socket_heartbeat.close()
+    print("Connessioni chiuse e server terminato")
 
 if __name__ == "__main__":
     main()
