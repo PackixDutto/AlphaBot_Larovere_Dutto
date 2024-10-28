@@ -41,18 +41,21 @@ def on_press(key):
 
 # Funzione chiamata quando un tasto viene rilasciato
 def on_release(key):
-    if key.char == "w" and diz["w"]:
-        diz["w"] = False
-        send_command("forward", "stop")
-    elif key.char == "a" and diz["a"]:
-        diz["a"] = False
-        send_command("left", "stop")
-    elif key.char == "s" and diz["s"]:
-        diz["s"] = False
-        send_command("backward", "stop")
-    elif key.char == "d" and diz["d"]:
-        diz["d"] = False
-        send_command("right", "stop")
+    try:
+        if key.char == "w" and diz["w"]:
+            diz["w"] = False
+            send_command("forward", "stop")
+        elif key.char == "a" and diz["a"]:
+            diz["a"] = False
+            send_command("left", "stop")
+        elif key.char == "s" and diz["s"]:
+            diz["s"] = False
+            send_command("backward", "stop")
+        elif key.char == "d" and diz["d"]:
+            diz["d"] = False
+            send_command("right", "stop")
+    except AttributeError:
+        pass
 
 # Funzione per avviare il listener della tastiera
 def start_listener():
