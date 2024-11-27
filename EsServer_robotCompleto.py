@@ -8,7 +8,7 @@ import threading
 #Indirizzo del server e dimensione del buffer
 MY_ADDRESS = ("192.168.1.123", 9999)
 BUFFER_SIZE = 4096
-DATABASE = "mio_databaseLarovere.db"
+DATABASE = "mio_database.db"
 
 alice = AlphaBot.AlphaBot()
 alice.stop()
