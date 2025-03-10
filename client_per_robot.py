@@ -2,11 +2,11 @@ import socket
 from pynput import keyboard
 
 # Indirizzo del server e dimensione del buffer
-SERVER_ADDRESS = ("192.168.1.123", 9999)
+SERVER_ADDRESS = ("192.168.1.123", 9090)
 BUFFER_SIZE = 4096
 
 # Dizionario per lo stato dei tasti
-diz = {"w": False, "a": False, "s": False, "d": False, "u": False}
+diz = {"w": False, "a": False, "s": False, "d": False}
 
 # Funzione per inviare i comandi al server
 def send_command(command, value):
@@ -36,9 +36,6 @@ def on_press(key):
         elif key.char == "d" and not diz["d"]:
             diz["d"] = True
             send_command("right", "start")
-        elif key.char == "u" and not diz["u"]:
-            diz["u"] = True
-            send_command("database", "start")
     except AttributeError:
         pass
 
@@ -57,9 +54,6 @@ def on_release(key):
         elif key.char == "d" and diz["d"]:
             diz["d"] = False
             send_command("right", "stop")
-        elif key.char == "u" and not diz["u"]:
-            diz["u"] = True
-            send_command("database", "start")
     except AttributeError:
         pass
 
